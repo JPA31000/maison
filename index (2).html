@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quiz 3D — Maison (du bas vers le haut)</title>
+  <meta name="description" content="Quiz pédagogique : répondez aux questions, un modèle GLB se révèle progressivement du bas vers le haut." />
+  <style>
+    :root{ --bg:#0f172a; --panel:#111827; --muted:#94a3b8; --accent:#22c55e; --border:#1f2937; --card:#0b1220; --good:#16a34a; --bad:#ef4444; }
+    *{box-sizing:border-box}
+    body{margin:0;background:linear-gradient(180deg,#0b1020,#0f172a);color:#e5e7eb;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,Helvetica Neue,Arial;min-height:100vh;display:flex;flex-direction:column}
+    header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;position:sticky;top:0;background:rgba(11,18,32,.7);backdrop-filter:blur(6px) saturate(140%);z-index:10}
+    header h1{margin:0;font-size:18px;font-weight:600}
+    header .sub{color:var(--muted);font-size:13px}
+    main{display:grid;grid-template-columns:1.6fr 1fr;gap:14px;padding:14px;min-height:calc(100vh - 66px)}
+    #viewerCard,#rightCol{border:1px solid var(--border);background:linear-gradient(180deg,rgba(16,24,40,.6),rgba(9,13,24,.6));border-radius:16px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    #canvasWrap{position:relative;height:72vh;min-height:420px;background:radial-gradient(1200px 600px at 50% 40%, rgba(59,130,246,.08), transparent),radial-gradient(900px 400px at 20% 80%, rgba(34,197,94,.08), transparent),#0a0f1e}
+    canvas{display:block;outline:none}
+    .toolbar{position:absolute;left:12px;top:12px;display:flex;gap:8px;flex-wrap:wrap}
+    .btn{background:#0b1220;border:1px solid var(--border);color:#d1d5db;padding:8px 10px;border-radius:10px;font-size:13px;cursor:pointer}
+    .btn:hover{border-color:#334155}
+    .pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;border:1px solid var(--border);padding:6px 8px;border-radius:999px;color:#cbd5e1;background:rgba(8,13,26,.6)}
+    .wrap{padding:12px 14px;display:grid;gap:12px}
+    .card{border:1px solid var(--border);background:radial-gradient(800px 400px at 0% 0%, rgba(59,130,246,.05), transparent),radial-gradient(900px 500px at 100% 100%, rgba(34,197,94,.05), transparent),var(--card);border-radius:14px;padding:12px}
+    .card h3{margin:0 0 8px 0;font-size:16px}
+    .rightSection{display:flex;flex-direction:column;gap:12px;padding:12px}
+    .question{display:flex;flex-direction:column;gap:10px}
+    .choices{display:flex;flex-direction:column;gap:8px}
+    .choice{border:1px solid var(--border);border-radius:10px;padding:10px;display:flex;gap:8px;cursor:pointer;background:#0b1220}
+    .choice.correct{border-color:rgba(34,197,94,.6);background:linear-gradient(180deg,rgba(34,197,94,.12),rgba(11,18,32,.7))}
+    .choice.wrong{border-color:rgba(239,68,68,.5);background:linear-gradient(180deg,rgba(239,68,68,.12),rgba(11,18,32,.7))}
+    .footer{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:8px}
+    .muted{color:var(--muted);font-size:12px}
+    .progress{display:grid;grid-template-columns:repeat(9,1fr);gap:6px}
+    .step{height:10px;border-radius:6px;background:#0b1220;border:1px solid var(--border)}
+    .step.done{background:linear-gradient(90deg, rgba(34,197,94,.9), rgba(59,130,246,.7))}
+    .overlay{position:absolute;inset:0;display:none;place-items:center;background:rgba(2,6,23,.6);backdrop-filter:blur(2px)}
+    .overlay .panel{background:#0b1220;border:1px solid var(--border);border-radius:12px;padding:14px;max-width:540px}
+    .toast{position:fixed;right:12px;bottom:12px;background:#0b1220;color:#e5e7eb;border:1px solid var(--border);padding:10px 12px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.35);display:none}
+    @media (max-width:1100px){main{grid-template-columns:1fr}#canvasWrap{height:58vh}}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Quiz 3D — Maison</h1>
+    <div class="sub">Répondez aux questions. À chaque bonne réponse, le modèle <code>GLB</code> se révèle <strong>du bas vers le haut</strong>.</div>
+    <span class="pill" style="margin-left:auto">Raccourcis : <kbd>R</kbd> recentrer · <kbd>A</kbd> tout afficher</span>
+  </header>
+
+  <main>
+    <section id="viewerCard">
+      <div id="canvasWrap">
+        <div class="toolbar">
+          <button class="btn" id="btnShowAll" title="Tout afficher (A)">Tout afficher</button>
+          <button class="btn" id="btnFit" title="Recentrer la vue (R)">Recentrer</button>
+          <input class="btn" type="file" id="fileInput" accept=".glb" title="Charger un GLB local" />
+        </div>
+        <div class="overlay" id="overlay">
+          <div class="panel">
+            <h3 style="margin:0 0 8px 0">Modèle introuvable</h3>
+            <p class="muted" style="margin:0 0 10px 0">Vérifiez le chemin et l'extension : <code>./assets/1_Maison.glb</code> (pas <code>.gbl</code>).</p>
+            <div class="muted">Astuce : testez l'URL directe de votre dépôt GitHub Pages : <code>/assets/1_Maison.glb</code>. Elle doit télécharger le fichier.</div>
+          </div>
+        </div>
+      </div>
+      <div class="wrap">
+        <div class="card">
+          <h3>Progression</h3>
+          <div class="progress" id="progress"></div>
+          <div class="muted" id="hintHeight"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="rightCol" class="rightSection">
+      <div class="card">
+        <h3>Quiz</h3>
+        <div id="quiz">Chargement des questions…</div>
+      </div>
+      <div class="card">
+        <h3>À savoir</h3>
+        <div class="muted">
+          <p>Pour GitHub Pages : conservez ce fichier comme <code>index.html</code> à la racine, créez le dossier <code>assets/</code> et ajoutez <code>1_Maison.glb</code>.</p>
+          <p>Le modèle est révélé par paliers de hauteur (tranchage automatique selon la hauteur totale).</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- 1) Script QUIZ (indépendant du 3D) -->
+  <script>
+    (function(){
+      const $ = (sel) => document.querySelector(sel);
+      const el = (tag, cls) => { const n = document.createElement(tag); if(cls) n.className=cls; return n; };
+      const toast = (msg) => { const t=$('#toast'); t.textContent=msg; t.style.display='block'; setTimeout(()=>t.style.display='none', 1600); };
+
+      const QUESTIONS = [
+        { q:"Quel type de fondation est le plus courant lorsque le sol porteur est proche de la surface ?", choices:["Semelles isolées","Pieux forés","Barrettes","Micropieux"], correct:0 },
+        { q:"Rôle principal d’un mur de soubassement :", choices:["Transmettre les charges des élévations vers les fondations","Former l’ossature de la toiture","Créer des cloisons intérieures","Supporter les marches de l’escalier"], correct:0 },
+        { q:"Différence principale entre une dalle pleine et un plancher poutrelles-hourdis :", choices:["La dalle est continue et coulée sur place ; le plancher associe éléments préfabriqués + dalle de compression","La dalle est toujours préfabriquée ; le plancher est toujours coulé sur place","Le plancher ne reprend pas les charges d’exploitation","Il n’y a aucune différence"], correct:0 },
+        { q:"Lequel n’est PAS un matériau porteur usuel pour un mur d’élévation ?", choices:["Béton armé banché","Blocs béton (agglo)","Briques","Plaque de plâtre BA13 seule"], correct:3 },
+        { q:"Une cloison de doublage sert surtout à :", choices:["Améliorer l’isolation et intégrer les réseaux","Porter la charpente","Remplacer les fondations","Former un escalier"], correct:0 },
+        { q:"Le coefficient Uw d’une fenêtre exprime :", choices:["La transmission thermique globale de la fenêtre","La résistance au feu","La performance acoustique uniquement","La perméabilité à l’air uniquement"], correct:0 },
+        { q:"Une ferme traditionnelle comprend typiquement :", choices:["Arbalétriers, entrait, poinçon","Linteau, appui, tableau","Chevron, liteau, tuile","Solive, poutrelle, hourdis"], correct:0 },
+        { q:"Le rôle d’un écran de sous-toiture est :", choices:["Limiter les infiltrations d’eau/poussières et résister au vent","Porter directement la couverture","Servir d’isolant principal","Assurer la ventilation intérieure"], correct:0 },
+        { q:"La « loi de Blondel » pour le confort d’un escalier s’écrit :", choices:["2h + g ≈ 60 à 64 cm","h + g ≈ 60 à 64 cm","2g + h ≈ 60 à 64 cm","h × g ≈ 60 à 64 cm"], correct:0 },
+      ];
+
+      window.revealStep = 0;
+
+      function buildProgressUI(){
+        const cont = $('#progress'); if(!cont) return; cont.innerHTML = '';
+        for(let i=0;i<QUESTIONS.length;i++) cont.appendChild(el('div','step'));
+        updateProgressUI();
+      }
+      function updateProgressUI(){ const steps = document.querySelectorAll('.step'); steps.forEach((s,i)=>s.classList.toggle('done', i < window.revealStep)); }
+      function applyRevealFromStep(){ if(typeof window._updateReveal3D === 'function') window._updateReveal3D(window.revealStep); updateProgressUI(); }
+      window._applyRevealFromStep = applyRevealFromStep;
+
+      function renderQuestion(index){
+        const quizEl = $('#quiz'); if(!quizEl) return;
+        if(index >= QUESTIONS.length){ quizEl.innerHTML = '<div class="muted">🎉 Quiz terminé. Le modèle en 3D reste manipulable.</div>'; return; }
+        const q = QUESTIONS[index];
+        quizEl.innerHTML = '';
+        const wrap = el('div','question');
+        const title = el('div',''); title.textContent = q.q;
+        const choices = el('div','choices');
+        q.choices.forEach((txt, idx)=>{
+          const c = el('label','choice');
+          const input = el('input'); input.type='radio'; input.name='choice'; input.value=idx; input.style.marginTop='4px';
+          const span = el('span',''); span.textContent = txt;
+          c.appendChild(input); c.appendChild(span);
+          c.addEventListener('click', ()=>{
+            const choiceEls = choices.querySelectorAll('.choice'); choiceEls.forEach(e=>e.classList.remove('correct','wrong'));
+            if(idx===q.correct){ c.classList.add('correct'); toast('✅ Bonne réponse !'); window.revealStep = Math.min(window.revealStep+1, QUESTIONS.length); applyRevealFromStep(); setTimeout(()=> renderQuestion(index+1), 700); }
+            else{ c.classList.add('wrong'); toast('✋ Mauvaise réponse, réessayez.'); }
+          });
+          choices.appendChild(c);
+        });
+        const footer = el('div','footer'); const info = el('div','muted'); info.textContent = `Question ${index+1} / ${QUESTIONS.length}`; footer.appendChild(info);
+        wrap.appendChild(title); wrap.appendChild(choices); wrap.appendChild(footer); quizEl.appendChild(wrap);
+      }
+
+      const btnShowAll = document.getElementById('btnShowAll'); if(btnShowAll){ btnShowAll.onclick = ()=>{ window.revealStep = QUESTIONS.length; applyRevealFromStep(); toast('Tout affiché'); }; }
+      const btnFit = document.getElementById('btnFit'); if(btnFit){ btnFit.onclick = ()=>{ if(typeof window._fit3D === 'function') window._fit3D(); }; }
+
+      // File input (permet de charger un GLB local si l'asset ne se charge pas)
+      const fileInput = document.getElementById('fileInput');
+      if(fileInput){ fileInput.onchange = ()=>{ const f = fileInput.files?.[0]; if(f) window._loadGLBFromBlob && window._loadGLBFromBlob(f); }; }
+
+      buildProgressUI();
+      renderQuestion(0);
+      const hint = document.getElementById('hintHeight'); if(hint) hint.textContent = 'Le modèle sera chargé depuis ./assets/1_Maison.glb (ou via le bouton local).';
+    })();
+  </script>
+
+  <!-- 2) Script 3D (module) -->
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+    import { OrbitControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+    import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
+    import { DRACOLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/DRACOLoader.js';
+    import { KTX2Loader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/KTX2Loader.js';
+    import { RoomEnvironment } from 'https://unpkg.com/three@0.160.0/examples/jsm/environments/RoomEnvironment.js';
+
+    const $ = (sel) => document.querySelector(sel);
+
+    let scene, camera, renderer, controls, glbRoot; let meshes = []; let yMin = 0, yRange = 1;
+    let gltfLoader, dracoLoader, ktx2Loader; // loaders avec Draco & KTX2
+
+    function init3D(){
+      const canvasWrap = document.getElementById('canvasWrap');
+      renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
+      renderer.setSize(canvasWrap.clientWidth, canvasWrap.clientHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      canvasWrap.appendChild(renderer.domElement);
+
+      scene = new THREE.Scene();
+      const pmrem = new THREE.PMREMGenerator(renderer); const env = new RoomEnvironment();
+      const envRT = pmrem.fromScene(env, 0.03).texture; scene.environment = envRT;
+
+      camera = new THREE.PerspectiveCamera(60, canvasWrap.clientWidth / canvasWrap.clientHeight, 0.1, 2000);
+      camera.position.set(2.5, 2.0, 3.5);
+      controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
+
+      const hemi = new THREE.HemisphereLight(0xffffff, 0x445566, 0.7); scene.add(hemi);
+      const dir = new THREE.DirectionalLight(0xffffff, 0.7); dir.position.set(5,8,5); scene.add(dir);
+
+      // ----- Loaders (Draco + KTX2) -----
+      gltfLoader = new GLTFLoader();
+
+      dracoLoader = new DRACOLoader();
+      dracoLoader.setDecoderPath('https://unpkg.com/three@0.160.0/examples/jsm/libs/draco/');
+      gltfLoader.setDRACOLoader(dracoLoader);
+
+      ktx2Loader = new KTX2Loader();
+      ktx2Loader.setTranscoderPath('https://unpkg.com/three@0.160.0/examples/jsm/libs/basis/');
+      ktx2Loader.detectSupport(renderer);
+      gltfLoader.setKTX2Loader(ktx2Loader);
+
+      window.addEventListener('resize', ()=>{ const w = canvasWrap.clientWidth, h = canvasWrap.clientHeight; camera.aspect = w/h; camera.updateProjectionMatrix(); renderer.setSize(w,h); });
+      (function animate(){ requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); })();
+    }
+
+    function fitViewToObject(obj){ if(!obj) return; const bbox = new THREE.Box3().setFromObject(obj); const size = bbox.getSize(new THREE.Vector3()); const center = bbox.getCenter(new THREE.Vector3()); const maxDim = Math.max(size.x, size.y, size.z); const fov = camera.fov * (Math.PI/180); let cameraZ = Math.abs(maxDim/2 / Math.tan(fov/2)); cameraZ *= 1.6; camera.position.set(center.x + cameraZ*0.6, center.y + cameraZ*0.55, center.z + cameraZ*0.6); camera.near = maxDim/100; camera.far = Math.max(2000, maxDim*50); camera.updateProjectionMatrix(); controls.target.copy(center); controls.update(); }
+
+    function prepareModel(root){ meshes = []; root.updateWorldMatrix(true, true); const globalBox = new THREE.Box3().setFromObject(root); yMin = globalBox.min.y; const yMax = globalBox.max.y; yRange = Math.max(1e-6, yMax - yMin); document.getElementById('hintHeight').textContent = `Hauteur modèle : ${yRange.toFixed(2)} unités (y ∈ ${yMin.toFixed(2)} → ${yMax.toFixed(2)})`; root.traverse((o)=>{ if(o.isMesh){ const bb = new THREE.Box3().setFromObject(o); o.visible=false; meshes.push({obj:o, yTop:bb.max.y}); } }); }
+
+    function thresholdForStep(step){ const n = 9; const fraction = Math.min(1, Math.max(0, step/n)); return yMin + fraction * yRange + 1e-4; }
+
+    function updateReveal3D(step){ if(!meshes.length) return; const th = thresholdForStep(step); for(const m of meshes){ m.obj.visible = (m.yTop <= th); } if(typeof window._applyRevealFromStep === 'function') window._applyRevealFromStep(); }
+
+    // Expose hooks
+    window._updateReveal3D = updateReveal3D; window._fit3D = ()=> fitViewToObject(glbRoot);
+
+    // Permet de charger un fichier local via <input type="file">
+    window._loadGLBFromBlob = async function(blob){ try{ const url = URL.createObjectURL(blob); await loadFromURL(url); URL.revokeObjectURL(url); }catch(e){ console.error(e); alert('Échec du chargement du GLB local.'); } };
+
+    async function loadFromURL(url){ try{ const gltf = await gltfLoader.loadAsync(url); if(glbRoot) scene.remove(glbRoot); glbRoot = gltf.scene; scene.add(glbRoot); prepareModel(glbRoot); fitViewToObject(glbRoot); document.getElementById('overlay').style.display='none'; if(typeof window._applyRevealFromStep === 'function') window._applyRevealFromStep(); }catch(err){ console.error('Erreur de chargement :', url, err); throw err; } }
+
+    async function loadModel(){
+      // Essais successifs pour éviter les erreurs de nommage/chemin
+      const CANDIDATES = [ './assets/1_Maison.glb', './assets/1_Maison.gbl', './1_Maison.glb' ];
+      for(const p of CANDIDATES){
+        try{ await loadFromURL(p); console.info('✅ Modèle chargé depuis', p); return; }catch{ /* essayer le suivant */ }
+      }
+      document.getElementById('overlay').style.display='grid';
+    }
+
+    // Boot
+    init3D();
+    loadModel();
+  </script>
+</body>
+</html>
